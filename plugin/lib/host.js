@@ -16,9 +16,9 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID, randomBytes } from 'node:crypto'
 
-export const inject = ['webServer']
+export const inject = ['webServer', 'connection']
 
-const 版本 = 'v0.2.0'
+const 版本 = 'v0.2.1'
 const 根 = join(homedir(), '.dsh', 'heartline')
 const 宿主心跳 = join(根, 'host.beat.json')
 const 本体心跳 = join(根, 'body.beat.json')
@@ -187,6 +187,30 @@ function 读体(req) {
   })
 }
 
+// 只认本人：设置页点得动，外面来的点不动。
+// DSH 自带的路由有登录校验，插件手挂的路由默认没有 —— 不补这一道，
+// 本机上任何程序（包括随便哪个网页的 fetch）都能改阈值、把自动急救打开。
+function 造门(ctx) {
+  return function 只认本人(handler) {
+    return async (req, res) => {
+      try {
+        const 连接 = ctx.get ? ctx.get('connection') : null
+        const 拒 = 连接 && typeof 连接.requestRejection === 'function' ? 连接.requestRejection(req) : undefined
+        if (拒 === 401 || 拒 === 403) {
+          记('拒了一次外来请求', { 码: 拒, 方法: String((req && req.method) || ''), 路径: String((req && req.url) || '') })
+          发JSON(res, 拒, { ok: false, 说: 拒 === 401 ? '需要登录' : '不允许' })
+          return
+        }
+      } catch { /* 鉴权这条路自己坏了就放行：不能让设置页打不开 */ }
+      return handler(req, res)
+    }
+  }
+}
+
+function 挂(ctx, 只认本人, 路径, handler) {
+  ctx.webServer.register({ kind: 'exact', path: 路径, handler: 只认本人(handler) })
+}
+
 export function apply(ctx) {
   try { if (!existsSync(根)) mkdirSync(根, { recursive: true }) } catch { }
   读配置()
@@ -197,53 +221,37 @@ export function apply(ctx) {
   ctx.effect(() => () => { if (定时器) clearInterval(定时器) })
 
   // 状态：设置页和外部脚本都读这一条
-  ctx.webServer.register({
-    kind: 'exact',
-    path: '/dsh-heartline/status',
-    handler: (req, res) => { 发JSON(res, 200, 判定()) },
-  })
+  挂(ctx, 只认本人, '/dsh-heartline/status', (req, res) => { 发JSON(res, 200, 判定()) })
 
-  // 配置：读
-  ctx.webServer.register({
-    kind: 'exact',
-    path: '/dsh-heartline/config',
-    handler: async (req, res) => {
-      if (req.method === 'POST') {
-        const 体 = await 读体(req)
-        const 新 = 存配置(体)
-        记('改设置', 新)
-        发JSON(res, 200, { ok: true, config: 新 })
-        return
-      }
-      发JSON(res, 200, { ok: true, config: 配置 })
-    },
+  // 配置：读 / 改
+  挂(ctx, 只认本人, '/dsh-heartline/config', async (req, res) => {
+    if (req.method === 'POST') {
+      const 体 = await 读体(req)
+      const 新 = 存配置(体)
+      记('改设置', 新)
+      发JSON(res, 200, { ok: true, config: 新 })
+      return
+    }
+    发JSON(res, 200, { ok: true, config: 配置 })
   })
 
   // 网页脚印：渲染进程每 5 秒踩一次。断了说明界面卡了（页面卡死时不会有人来踩）
-  ctx.webServer.register({
-    kind: 'exact',
-    path: '/dsh-heartline/face',
-    handler: async (req, res) => {
-      const 体 = await 读体(req)
-      网页最后 = Date.now()
-      写原子(网页脚印, { at: new Date(网页最后).toISOString(), seq: 体?.seq ?? null, client: String(体?.client ?? '').slice(0, 40) })
-      发JSON(res, 200, { ok: true, host_seq: 序号 })
-    },
+  挂(ctx, 只认本人, '/dsh-heartline/face', async (req, res) => {
+    const 体 = await 读体(req)
+    网页最后 = Date.now()
+    写原子(网页脚印, { at: new Date(网页最后).toISOString(), seq: 体 && 体.seq !== undefined ? 体.seq : null, client: String((体 && 体.client) || '').slice(0, 40) })
+    发JSON(res, 200, { ok: true, host_seq: 序号 })
   })
 
   // 事件：最近 N 条，给设置页看
-  ctx.webServer.register({
-    kind: 'exact',
-    path: '/dsh-heartline/events',
-    handler: async (req, res) => {
-      let 行 = []
-      try {
-        const 原文 = await fs.readFile(事件文件, 'utf8')
-        行 = 原文.trim().split('\n').slice(-40).map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
-      } catch { }
-      发JSON(res, 200, { ok: true, items: 行 })
-    },
+  挂(ctx, 只认本人, '/dsh-heartline/events', async (req, res) => {
+    let 行 = []
+    try {
+      const 原文 = await fs.readFile(事件文件, 'utf8')
+      行 = 原文.trim().split('\n').slice(-40).map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
+    } catch { }
+    发JSON(res, 200, { ok: true, items: 行 })
   })
 
-  记('路由已挂：status / config / face / events')
+  记('路由已挂（带鉴权）：status / config / face / events')
 }
