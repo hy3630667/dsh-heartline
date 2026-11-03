@@ -1,0 +1,4 @@
+# DSH「心跳急救」—— 插件只当证人：证明自己和网页还活着，不判定该不该被杀
+- insert:
+    - id: heartline
+      name: 'dsh-heartline'
