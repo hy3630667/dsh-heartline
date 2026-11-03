@@ -1,0 +1,12 @@
+# 运行时数据不进仓库
+*.jsonl
+state.json
+body.beat.json
+host.beat.json
+selfcheck.json
+*.lock
+*.tmp
+# 现场与日志
+现场/
+日志/
+*.log
