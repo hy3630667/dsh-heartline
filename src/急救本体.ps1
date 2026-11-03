@@ -20,6 +20,7 @@ $事件文件 = Join-Path $根 '事件.jsonl'
 $自检文件 = Join-Path $根 'selfcheck.json'
 $锁文件 = Join-Path $根 '本体.lock'
 $看护状态 = 'D:\rensheng\00-基地\心跳\看护\状态.json'
+$版本 = 'v0.1.0'
 $DSH = 'D:\红\DeepSeek Harness.exe'
 $宽限秒 = 180
 $轮间隔 = 10
@@ -98,7 +99,7 @@ function 探针([int]$进程号, [int]$超时毫秒) {
     return @{ 类 = 'timeout'; 说明 = '探针没回'; 毫秒 = $表.ElapsedMilliseconds }
 }
 
-记 ('本体启动 instance=' + $实例ID + ' 轮间隔=' + $轮间隔 + '秒')
+记 ('本体启动 ' + $版本 + ' instance=' + $实例ID + ' 轮间隔=' + $轮间隔 + '秒')
 
 while ($true) {
     $序号++
@@ -142,7 +143,7 @@ while ($true) {
 
     $新nonce = -join ((1..16) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })
     写JSON $心跳文件 ([pscustomobject]@{
-        schema = 'dsh-heartline/1'; who = 'body'; boot_id = $开机ID; instance_id = $实例ID
+        schema = 'dsh-heartline/1'; who = 'body'; version = $版本; boot_id = $开机ID; instance_id = $实例ID
         pid = $PID; seq = $序号; at = $现在.ToString('O'); mono_ms = [int]([Diagnostics.Stopwatch]::GetTimestamp() / 10000)
         state = $判定; nonce = $新nonce
     })
