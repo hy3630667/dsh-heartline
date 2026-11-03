@@ -18,7 +18,7 @@ import { randomUUID, randomBytes } from 'node:crypto'
 
 export const inject = ['webServer', 'connection']
 
-const 版本 = 'v0.2.1'
+const 版本 = 'v0.2.2'
 const 根 = join(homedir(), '.dsh', 'heartline')
 const 宿主心跳 = join(根, 'host.beat.json')
 const 本体心跳 = join(根, 'body.beat.json')
@@ -220,8 +220,14 @@ export function apply(ctx) {
 
   ctx.effect(() => () => { if (定时器) clearInterval(定时器) })
 
+  // ⚠ v0.2.1 第一版栽在这：下面全用「只认本人」，我却忘了在这儿把它造出来。
+  //   结果 apply 一进来就 ReferenceError，路由一条都没挂上，心跳停在 seq=1，
+  //   外面看是 404。教训写在代码里，别再犯第二次。
+  const 只认本人 = 造门(ctx)
+
   // 状态：设置页和外部脚本都读这一条
-  挂(ctx, 只认本人, '/dsh-heartline/status', (req, res) => { 发JSON(res, 200, 判定()) })
+  try {
+    挂(ctx, 只认本人, '/dsh-heartline/status', (req, res) => { 发JSON(res, 200, 判定()) })
 
   // 配置：读 / 改
   挂(ctx, 只认本人, '/dsh-heartline/config', async (req, res) => {
@@ -254,4 +260,8 @@ export function apply(ctx) {
   })
 
   记('路由已挂（带鉴权）：status / config / face / events')
+  } catch (e) {
+    // 路由挂不上也不能把心跳带走：外面至少还能从文件看出这个进程活着
+    记('路由没挂上', String((e && e.message) || e))
+  }
 }

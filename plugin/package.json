@@ -1,6 +1,6 @@
 {
   "name": "dsh-heartline",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "心跳急救：三份心跳（外部本体 / DSH 宿主 / 网页）互证，设置页能看能调。插件只当证人，不杀不拉。",
   "license": "MIT",
   "type": "module",
